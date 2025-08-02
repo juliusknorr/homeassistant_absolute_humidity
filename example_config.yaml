@@ -1,0 +1,36 @@
+# Example Configuration for Absolute Humidity Integration
+
+# Basic setup - just add this to your configuration.yaml
+sensor:
+  - platform: absolute_humidity
+
+# The component will automatically discover humidity/temperature sensor pairs
+# and create corresponding absolute humidity sensors.
+
+# Supported naming patterns:
+# - sensor.bedroom_humidity → sensor.bedroom_temperature
+# - sensor.living_room_humidity → sensor.living_room_temperature  
+# - sensor.kitchen_humidity → sensor.kitchen_temp
+# - sensor.office_humidity → sensor.office_temperature
+
+# You can also manually add sensors using the service:
+# Service: absolute_humidity.add_sensor
+# Data:
+#   humidity_entity_id: sensor.custom_humidity
+#   temperature_entity_id: sensor.custom_temperature
+
+# To rediscover all sensors:
+# Service: absolute_humidity.rediscover
+
+# Example automation to add sensors for specific devices:
+automation:
+  - alias: "Add absolute humidity for new Zigbee sensors"
+    trigger:
+      - platform: event
+        event_type: device_registry_updated
+    condition:
+      - condition: template
+        value_template: "{{ 'humidity' in trigger.event.data.device.name.lower() }}"
+    action:
+      - delay: 5  # Wait for entities to be created
+      - service: absolute_humidity.rediscover

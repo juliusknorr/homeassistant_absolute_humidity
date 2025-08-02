@@ -1,0 +1,10 @@
+{
+  "domain": "absolute_humidity",
+  "name": "Absolute Humidity",
+  "documentation": "https://github.com/yourusername/absolute_humidity",
+  "dependencies": [],
+  "codeowners": [],
+  "requirements": [],
+  "version": "1.1.0",
+  "iot_class": "calculated"
+}
