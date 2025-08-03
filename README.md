@@ -1,4 +1,3 @@
-````markdown
 # Absolute Humidity Sensor
 
 > [!NOTE]  
