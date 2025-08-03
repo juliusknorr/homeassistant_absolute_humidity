@@ -4,8 +4,24 @@
 sensor:
   - platform: absolute_humidity
 
+# Optional: Configure specific outdoor sensors for window recommendations
+# If not specified, the component will attempt to auto-detect outdoor sensors
+# You can also configure the minimum offsets required to trigger state changes
+sensor:
+  - platform: absolute_humidity
+    outdoor_temperature_sensor: sensor.outdoor_temperature
+    outdoor_humidity_sensor: sensor.outdoor_humidity
+    # Temperature offset in °C - how much warmer outdoor temp must be to trigger "too warm"
+    temperature_offset: 3.0  # Default: 3.0°C
+    # Absolute humidity offset in g/m³ - how much higher outdoor humidity must be to trigger "too wet"
+    absolute_humidity_offset: 0.5  # Default: 0.5 g/m³
+    # Absolute humidity warning level in g/m³ - above this level triggers "opening recommended"
+    absolute_humidity_warning_level: 12.0  # Default: 12.0 g/m³
+
 # The component will automatically discover humidity/temperature sensor pairs
 # and create corresponding absolute humidity sensors.
+# Window recommendation sensors are NOT created automatically and must be
+# added manually using the add_window_sensor service.
 
 # Supported naming patterns:
 # - sensor.bedroom_humidity → sensor.bedroom_temperature
@@ -13,14 +29,54 @@ sensor:
 # - sensor.kitchen_humidity → sensor.kitchen_temp
 # - sensor.office_humidity → sensor.office_temperature
 
-# You can also manually add sensors using the service:
+# Outdoor sensor detection patterns (for window recommendations):
+# - sensor.outdoor_temperature, sensor.outdoor_humidity
+# - sensor.outside_temperature, sensor.outside_humidity
+# - sensor.weather_temperature, sensor.weather_humidity
+# - sensor.garden_temperature, sensor.garden_humidity
+# - sensor.patio_temperature, sensor.patio_humidity
+
+# Window recommendation states:
+# - "opening recommended": Indoor absolute humidity is above the warning level
+# - "ok to open": Outdoor conditions are better than indoor
+# - "too wet": Outdoor absolute humidity is higher than indoor by the configured offset
+# - "too warm": Outdoor temperature is higher than indoor by the configured offset
+#
+# Offset Configuration:
+# - temperature_offset: Minimum temperature difference (°C) required for "too warm" state
+#   Default: 3.0°C (outdoor must be 3°C warmer than indoor)
+# - absolute_humidity_offset: Minimum absolute humidity difference (g/m³) for "too wet" state  
+#   Default: 0.5 g/m³ (outdoor must be 0.5 g/m³ higher than indoor)
+# - absolute_humidity_warning_level: Indoor absolute humidity level (g/m³) above which "opening recommended" is triggered
+#   Default: 12.0 g/m³ (if indoor humidity exceeds this, opening is recommended regardless of outdoor conditions)
+#
+# These offsets prevent frequent state changes due to small measurement variations
+# and provide hysteresis for more stable recommendations.
+
+# Manual sensor addition services:
+
+# The integration no longer automatically creates window recommendation sensors.
+# To create window recommendation sensors, use the add_window_sensor service
+# and specify all required entity IDs explicitly.
+
 # Service: absolute_humidity.add_sensor
 # Data:
 #   humidity_entity_id: sensor.custom_humidity
 #   temperature_entity_id: sensor.custom_temperature
 
+# Service: absolute_humidity.add_window_sensor
+# Data:
+#   indoor_humidity_entity_id: sensor.bedroom_humidity
+#   indoor_temperature_entity_id: sensor.bedroom_temperature
+#   outdoor_humidity_entity_id: sensor.outdoor_humidity
+#   outdoor_temperature_entity_id: sensor.outdoor_temperature
+
 # To rediscover all sensors:
 # Service: absolute_humidity.rediscover
+
+# To re-evaluate existing sensors for window recommendation creation
+# (useful when outdoor sensors become available after indoor sensors):
+# Service: absolute_humidity.reevaluate_window_sensors
 
 # Example automation to add sensors for specific devices:
 automation:
@@ -34,3 +90,334 @@ automation:
     action:
       - delay: 5  # Wait for entities to be created
       - service: absolute_humidity.rediscover
+
+# Example automation using window recommendations:
+  - alias: "Notify when it's good to open bedroom windows"
+    trigger:
+      - platform: state
+        entity_id: sensor.window_recommendation_bedroom
+        to: "ok to open"
+    action:
+      - service: notify.mobile_app_your_phone
+        data:
+          message: "It's a good time to open the bedroom windows!"
+
+  - alias: "Close windows when outdoor humidity is too high"
+    trigger:
+      - platform: state
+        entity_id: sensor.window_recommendation_living_room
+        to: "too wet"
+    action:
+      - service: notify.mobile_app_your_phone
+        data:
+          message: "Consider closing living room windows - outdoor humidity is higher than indoor."
+
+# Dashboard Tile Examples for Window Recommendations
+# ===================================================
+
+# The window recommendation sensors provide three states:
+# - "ok to open": Green - Good conditions to open windows
+# - "too wet": Red - Outdoor humidity too high, keep windows closed
+# - "too warm": Orange - Outdoor temperature too high, consider closing
+
+# Example 1: Simple Entity Card with Custom Icon
+type: entity
+entity: sensor.window_recommendation_bedroom
+name: Bedroom Windows
+icon: mdi:window-open-variant
+state_color: true
+
+# Example 2: Conditional Card with Different Icons and Colors per State
+type: conditional
+conditions:
+  - entity: sensor.window_recommendation_bedroom
+    state: "ok to open"
+card:
+  type: entity
+  entity: sensor.window_recommendation_bedroom
+  name: "✅ Open Bedroom Windows"
+  icon: mdi:window-open
+  theme: green
+
+---
+
+type: conditional
+conditions:
+  - entity: sensor.window_recommendation_bedroom
+    state: "too wet"
+card:
+  type: entity
+  entity: sensor.window_recommendation_bedroom
+  name: "💧 Keep Windows Closed"
+  icon: mdi:window-closed-variant
+  theme: red
+
+---
+
+type: conditional
+conditions:
+  - entity: sensor.window_recommendation_bedroom
+    state: "too warm"
+card:
+  type: entity
+  entity: sensor.window_recommendation_bedroom
+  name: "🌡️ Too Warm Outside"
+  icon: mdi:thermometer-alert
+  theme: orange
+
+# Example 3: Mushroom Entity Card (requires mushroom cards)
+type: custom:mushroom-entity-card
+entity: sensor.window_recommendation_living_room
+name: Living Room
+icon_color: |
+  {% if states('sensor.window_recommendation_living_room') == 'ok to open' %}
+    green
+  {% elif states('sensor.window_recommendation_living_room') == 'too wet' %}
+    red
+  {% elif states('sensor.window_recommendation_living_room') == 'too warm' %}
+    orange
+  {% else %}
+    grey
+  {% endif %}
+icon: |
+  {% if states('sensor.window_recommendation_living_room') == 'ok to open' %}
+    mdi:window-open
+  {% elif states('sensor.window_recommendation_living_room') == 'too wet' %}
+    mdi:water-alert
+  {% elif states('sensor.window_recommendation_living_room') == 'too warm' %}
+    mdi:thermometer-alert
+  {% else %}
+    mdi:window-closed
+  {% endif %}
+tap_action:
+  action: more-info
+
+# Example 4: Custom Button Card with Rich Styling (requires button-card)
+type: custom:button-card
+entity: sensor.window_recommendation_kitchen
+name: Kitchen Windows
+show_name: true
+show_state: true
+show_icon: true
+styles:
+  card:
+    - height: 80px
+    - border-radius: 10px
+  name:
+    - font-size: 14px
+    - font-weight: bold
+  state:
+    - font-size: 12px
+state:
+  - value: "ok to open"
+    color: white
+    styles:
+      card:
+        - background: linear-gradient(45deg, #4CAF50, #66BB6A)
+        - border: 2px solid #4CAF50
+      icon:
+        - color: white
+    icon: mdi:window-open
+  - value: "too wet"
+    color: white
+    styles:
+      card:
+        - background: linear-gradient(45deg, #F44336, #EF5350)
+        - border: 2px solid #F44336
+      icon:
+        - color: white
+    icon: mdi:water-alert
+  - value: "too warm"
+    color: white
+    styles:
+      card:
+        - background: linear-gradient(45deg, #FF9800, #FFB74D)
+        - border: 2px solid #FF9800
+      icon:
+        - color: white
+    icon: mdi:thermometer-alert
+tap_action:
+  action: more-info
+
+# Example 5: Grid Layout with Multiple Rooms
+type: grid
+columns: 2
+square: false
+cards:
+  - type: custom:mushroom-entity-card
+    entity: sensor.window_recommendation_bedroom
+    name: Bedroom
+    icon_color: |
+      {% set state = states('sensor.window_recommendation_bedroom') %}
+      {% if state == 'ok to open' %} green
+      {% elif state == 'too wet' %} red
+      {% elif state == 'too warm' %} orange
+      {% else %} grey {% endif %}
+    icon: |
+      {% set state = states('sensor.window_recommendation_bedroom') %}
+      {% if state == 'ok to open' %} mdi:window-open
+      {% elif state == 'too wet' %} mdi:water-alert
+      {% elif state == 'too warm' %} mdi:thermometer-alert
+      {% else %} mdi:window-closed {% endif %}
+    
+  - type: custom:mushroom-entity-card
+    entity: sensor.window_recommendation_living_room
+    name: Living Room
+    icon_color: |
+      {% set state = states('sensor.window_recommendation_living_room') %}
+      {% if state == 'ok to open' %} green
+      {% elif state == 'too wet' %} red
+      {% elif state == 'too warm' %} orange
+      {% else %} grey {% endif %}
+    icon: |
+      {% set state = states('sensor.window_recommendation_living_room') %}
+      {% if state == 'ok to open' %} mdi:window-open
+      {% elif state == 'too wet' %} mdi:water-alert
+      {% elif state == 'too warm' %} mdi:thermometer-alert
+      {% else %} mdi:window-closed {% endif %}
+
+# Example 6: Detailed Information Card with Attributes
+type: entities
+title: Window Recommendations
+entities:
+  - entity: sensor.window_recommendation_bedroom
+    name: Bedroom
+    icon: |
+      {% set state = states('sensor.window_recommendation_bedroom') %}
+      {% if state == 'ok to open' %} mdi:window-open
+      {% elif state == 'too wet' %} mdi:water-alert
+      {% elif state == 'too warm' %} mdi:thermometer-alert
+      {% else %} mdi:window-closed {% endif %}
+    secondary_info: |
+      In: {{ state_attr('sensor.window_recommendation_bedroom', 'indoor_humidity_value') }} / 
+      {{ state_attr('sensor.window_recommendation_bedroom', 'indoor_temperature_value') }} | 
+      Out: {{ state_attr('sensor.window_recommendation_bedroom', 'outdoor_humidity_value') }} / 
+      {{ state_attr('sensor.window_recommendation_bedroom', 'outdoor_temperature_value') }}
+
+# Example 7: Picture Elements with Custom Background
+type: picture-elements
+image: /local/house_floorplan.png  # Replace with your floorplan image
+elements:
+  - type: state-badge
+    entity: sensor.window_recommendation_bedroom
+    style:
+      top: 20%
+      left: 70%
+      filter: |
+        {% set state = states('sensor.window_recommendation_bedroom') %}
+        {% if state == 'ok to open' %}
+          drop-shadow(0 0 10px #4CAF50)
+        {% elif state == 'too wet' %}
+          drop-shadow(0 0 10px #F44336)
+        {% elif state == 'too warm' %}
+          drop-shadow(0 0 10px #FF9800)
+        {% endif %}
+  
+  - type: state-badge
+    entity: sensor.window_recommendation_living_room
+    style:
+      top: 60%
+      left: 30%
+      filter: |
+        {% set state = states('sensor.window_recommendation_living_room') %}
+        {% if state == 'ok to open' %}
+          drop-shadow(0 0 10px #4CAF50)
+        {% elif state == 'too wet' %}
+          drop-shadow(0 0 10px #F44336)
+        {% elif state == 'too warm' %}
+          drop-shadow(0 0 10px #FF9800)
+        {% endif %}
+
+# Example 8: Actionable Notification Style Card
+type: markdown
+content: |
+  ## 🪟 Window Recommendations
+  
+  {% set bedroom = states('sensor.window_recommendation_bedroom') %}
+  {% set living = states('sensor.window_recommendation_living_room') %}
+  {% set kitchen = states('sensor.window_recommendation_kitchen') %}
+  
+  ### Bedroom: 
+  {% if bedroom == 'ok to open' %}
+  🟢 **Good to open!** Fresh air will help reduce humidity.
+  {% elif bedroom == 'too wet' %}
+  🔴 **Keep closed** - outdoor humidity ({{ state_attr('sensor.window_recommendation_bedroom', 'outdoor_humidity_value') }}) is higher than indoor ({{ state_attr('sensor.window_recommendation_bedroom', 'indoor_humidity_value') }}).
+  {% elif bedroom == 'too warm' %}
+  🟠 **Too warm outside** - consider waiting until evening.
+  {% endif %}
+  
+  ### Living Room:
+  {% if living == 'ok to open' %}
+  🟢 **Good to open!** Perfect conditions for fresh air.
+  {% elif living == 'too wet' %}
+  🔴 **Keep closed** - too humid outside.
+  {% elif living == 'too warm' %}
+  🟠 **Too warm** - wait for cooler temperatures.
+  {% endif %}
+
+# Example 9: Gauge Card for Humidity Difference
+type: gauge
+entity: sensor.window_recommendation_bedroom
+name: Window Status
+needle: true
+severity:
+  green: 0
+  yellow: 1
+  red: 2
+unit: ""
+min: 0
+max: 2
+segments:
+  - from: 0
+    color: "#4CAF50"  # Green for "ok to open"
+  - from: 1
+    color: "#FF9800"  # Orange for "too warm"
+  - from: 2
+    color: "#F44336"  # Red for "too wet"
+
+# Example 10: Horizontal Stack with Quick Actions
+type: horizontal-stack
+cards:
+  - type: custom:mushroom-entity-card
+    entity: sensor.window_recommendation_bedroom
+    name: Bedroom
+    tap_action:
+      action: call-service
+      service: notify.mobile_app_your_phone
+      service_data:
+        message: "Bedroom window recommendation: {{ states('sensor.window_recommendation_bedroom') }}"
+    icon_color: |
+      {% set state = states('sensor.window_recommendation_bedroom') %}
+      {% if state == 'ok to open' %} green
+      {% elif state == 'too wet' %} red
+      {% elif state == 'too warm' %} orange
+      {% else %} grey {% endif %}
+  
+  - type: custom:mushroom-entity-card
+    entity: sensor.window_recommendation_living_room
+    name: Living Room
+    tap_action:
+      action: call-service
+      service: script.toggle_living_room_windows  # If you have automated windows
+    icon_color: |
+      {% set state = states('sensor.window_recommendation_living_room') %}
+      {% if state == 'ok to open' %} green
+      {% elif state == 'too wet' %} red
+      {% elif state == 'too warm' %} orange
+      {% else %} grey {% endif %}
+
+# Color Scheme Reference:
+# ========================
+# Green (#4CAF50): ok to open - good conditions
+# Red (#F44336): too wet - outdoor humidity too high
+# Orange (#FF9800): too warm - outdoor temperature too high
+# Grey (#9E9E9E): unknown/unavailable
+
+# Icon Reference:
+# ===============
+# mdi:window-open - Windows should be opened
+# mdi:window-closed / mdi:window-closed-variant - Keep windows closed
+# mdi:water-alert - Too humid outside
+# mdi:thermometer-alert - Too warm outside
+# mdi:weather-windy - General air circulation
+# mdi:air-purifier - Air quality related
