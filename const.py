@@ -4,6 +4,7 @@ DOMAIN = "absolute_humidity"
 
 # Dispatcher signals
 SIGNAL_ADD_SENSOR = "absolute_humidity_add_sensor"
+SIGNAL_ADD_DEW_POINT_SENSOR = "absolute_humidity_add_dew_point_sensor"
 SIGNAL_ADD_WINDOW_SENSOR = "absolute_humidity_add_window_sensor"
 
 # Window recommendation states

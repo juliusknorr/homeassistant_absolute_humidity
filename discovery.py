@@ -6,6 +6,7 @@ import logging
 
 from .const import SIGNAL_ADD_SENSOR, SIGNAL_ADD_WINDOW_SENSOR, DEFAULT_TEMPERATURE_OFFSET, DEFAULT_ABSOLUTE_HUMIDITY_OFFSET, DEFAULT_ABSOLUTE_HUMIDITY_WARNING_LEVEL
 from .absolute_humidity_sensor import AbsoluteHumiditySensor
+from .dew_point_sensor import DewPointSensor
 from .window_recommendation_sensor import WindowRecommendationSensor
 
 _LOGGER = logging.getLogger(__name__)
@@ -73,9 +74,9 @@ class AbsoluteHumidityDiscovery:
             _LOGGER.debug(f"Checking entity {entity_id} with state {state}")
             if state is None:
                 continue
-            # Skip self-generated absolute humidity sensors to avoid recursive discovery
-            if entity_id.startswith('sensor.absolute_humidity_'):
-                _LOGGER.debug(f"Skipping self-generated absolute humidity sensor: {entity_id}")
+            # Skip self-generated absolute humidity and dew point sensors to avoid recursive discovery
+            if entity_id.startswith('sensor.absolute_humidity_') or entity_id.startswith('sensor.dew_point_'):
+                _LOGGER.debug(f"Skipping self-generated sensor: {entity_id}")
                 continue
             if state.attributes.get('device_class') == 'humidity':
                 result = await self._try_create_sensor(entity_id)
@@ -103,9 +104,9 @@ class AbsoluteHumidityDiscovery:
             device_class = new_state.attributes.get('device_class')
             
             if device_class == 'humidity':
-                # Skip self-generated absolute humidity sensors to avoid recursive discovery
-                if entity_id.startswith('sensor.absolute_humidity_'):
-                    _LOGGER.debug(f"Skipping self-generated absolute humidity sensor: {entity_id}")
+                # Skip self-generated absolute humidity and dew point sensors to avoid recursive discovery
+                if entity_id.startswith('sensor.absolute_humidity_') or entity_id.startswith('sensor.dew_point_'):
+                    _LOGGER.debug(f"Skipping self-generated sensor: {entity_id}")
                     return
                 
                 # Handle both indoor humidity sensors (for absolute humidity) and outdoor humidity sensors (for window recommendations)
@@ -200,29 +201,32 @@ class AbsoluteHumidityDiscovery:
         if humidity_entity_id in self._created_sensors:
             return None
         
-        # Skip self-generated absolute humidity sensors to avoid recursive discovery
-        if humidity_entity_id.startswith('sensor.absolute_humidity_'):
-            _LOGGER.debug(f"Skipping self-generated absolute humidity sensor: {humidity_entity_id}")
+        # Skip self-generated absolute humidity and dew point sensors to avoid recursive discovery
+        if humidity_entity_id.startswith('sensor.absolute_humidity_') or humidity_entity_id.startswith('sensor.dew_point_'):
+            _LOGGER.debug(f"Skipping self-generated sensor: {humidity_entity_id}")
             return None
         
         temp_entity_id = self._find_matching_temperature_sensor(humidity_entity_id)
         if temp_entity_id:
             temp_state = self._hass.states.get(temp_entity_id)
             if temp_state and temp_state.attributes.get('device_class') == 'temperature':
-                _LOGGER.debug(f"Creating absolute humidity sensor for humidity: {humidity_entity_id}, temperature: {temp_entity_id}")
+                _LOGGER.debug(f"Creating absolute humidity and dew point sensors for humidity: {humidity_entity_id}, temperature: {temp_entity_id}")
                 self._created_sensors.add(humidity_entity_id)
                 
                 # Create the absolute humidity sensor
                 abs_humidity_sensor = AbsoluteHumiditySensor(self._hass, humidity_entity_id, temp_entity_id)
                 
+                # Create the dew point sensor
+                dew_point_sensor = DewPointSensor(self._hass, humidity_entity_id, temp_entity_id)
+                
                 # Also try to create a window recommendation sensor
                 window_sensor = await self._try_create_window_sensor(humidity_entity_id, temp_entity_id)
                 
-                # Return both sensors if window sensor was created, otherwise just the abs humidity sensor
+                # Return all sensors
+                sensors = [abs_humidity_sensor, dew_point_sensor]
                 if window_sensor:
-                    return [abs_humidity_sensor, window_sensor]
-                else:
-                    return abs_humidity_sensor
+                    sensors.append(window_sensor)
+                return sensors
         
         _LOGGER.debug(f"No matching temperature sensor found for humidity sensor: {humidity_entity_id}")
         return None

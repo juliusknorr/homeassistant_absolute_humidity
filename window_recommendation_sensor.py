@@ -34,6 +34,8 @@ class WindowRecommendationSensor(Entity):
         self._outdoor_temp_value = None
         self._indoor_abs_humidity_value = None
         self._outdoor_abs_humidity_value = None
+        self._indoor_dew_point_value = None
+        self._outdoor_dew_point_value = None
         
         # Create a user-friendly name
         indoor_humidity_name = hass.states.get(indoor_humidity_entity_id).attributes.get('friendly_name', indoor_humidity_entity_id)
@@ -130,14 +132,33 @@ class WindowRecommendationSensor(Entity):
             if outdoor_abs_humidity and outdoor_abs_humidity.state not in ['unknown', 'unavailable']:
                 attrs["outdoor_absolute_humidity_value"] = f"{outdoor_abs_humidity.state} g/m³"
         
+        # Add dew point values if available
+        # Try to find indoor dew point sensor
+        indoor_dew_point_sensor = self._find_dew_point_sensor(self._indoor_humidity_entity_id)
+        if indoor_dew_point_sensor:
+            indoor_dew_point_state = self._hass.states.get(indoor_dew_point_sensor)
+            if indoor_dew_point_state and indoor_dew_point_state.state not in ['unknown', 'unavailable']:
+                attrs["indoor_dew_point_value"] = f"{indoor_dew_point_state.state}°C"
+                
+        # Try to find outdoor dew point sensor
+        outdoor_dew_point_sensor = self._find_dew_point_sensor(self._outdoor_humidity_entity_id)
+        if outdoor_dew_point_sensor:
+            outdoor_dew_point_state = self._hass.states.get(outdoor_dew_point_sensor)
+            if outdoor_dew_point_state and outdoor_dew_point_state.state not in ['unknown', 'unavailable']:
+                attrs["outdoor_dew_point_value"] = f"{outdoor_dew_point_state.state}°C"
+        
         # Add temperature and absolute humidity differences if values are available
         if (self._indoor_temp_value is not None and self._outdoor_temp_value is not None):
             temp_diff = self._indoor_temp_value - self._outdoor_temp_value
-            attrs["temperature_difference"] = f"{temp_diff:+.1f}°C"  # + for positive, - for negative
+            attrs["temperature_difference"] = temp_diff
             
         if (self._indoor_abs_humidity_value is not None and self._outdoor_abs_humidity_value is not None):
             abs_humidity_diff = self._indoor_abs_humidity_value - self._outdoor_abs_humidity_value
-            attrs["absolute_humidity_difference"] = f"{abs_humidity_diff:+.2f} g/m³"
+            attrs["absolute_humidity_difference"] = abs_humidity_diff
+            
+        if (self._indoor_dew_point_value is not None and self._outdoor_dew_point_value is not None):
+            dew_point_diff = self._outdoor_dew_point_value - self._indoor_dew_point_value
+            attrs["dew_point_difference"] = dew_point_diff
         
         # Add configuration offsets
         attrs["temperature_offset"] = f"{self._temperature_offset}°C"
@@ -206,6 +227,8 @@ class WindowRecommendationSensor(Entity):
             # Try to get absolute humidity values directly from sensors first
             indoor_abs_humidity = None
             outdoor_abs_humidity = None
+            indoor_dew_point = None
+            outdoor_dew_point = None
 
             _LOGGER.debug(f"Checking absolute humidity sensors if available: {self._indoor_abs_humidity_entity_id}, {self._outdoor_abs_humidity_entity_id}")
 
@@ -253,10 +276,43 @@ class WindowRecommendationSensor(Entity):
                     except ValueError:
                         pass
 
+            # Try to find indoor dew point sensor
+            indoor_dew_point_sensor = self._find_dew_point_sensor(self._indoor_humidity_entity_id)
+            if indoor_dew_point_sensor:
+                indoor_dew_point_state = self._hass.states.get(indoor_dew_point_sensor)
+                _LOGGER.debug(f"Found indoor dew point sensor: {indoor_dew_point_sensor} with state {indoor_dew_point_state.state if indoor_dew_point_state else 'None'}")
+                if indoor_dew_point_state and indoor_dew_point_state.state not in ['unknown', 'unavailable']:
+                    try:
+                        indoor_dew_point = float(indoor_dew_point_state.state)
+                        _LOGGER.debug(f"Using indoor dew point sensor: {indoor_dew_point}°C")
+                    except ValueError:
+                        pass
+                        
+            # Try to find outdoor dew point sensor
+            outdoor_dew_point_sensor = self._find_dew_point_sensor(self._outdoor_humidity_entity_id)
+            if outdoor_dew_point_sensor:
+                outdoor_dew_point_state = self._hass.states.get(outdoor_dew_point_sensor)
+                _LOGGER.debug(f"Found outdoor dew point sensor: {outdoor_dew_point_sensor} with state {outdoor_dew_point_state.state if outdoor_dew_point_state else 'None'}")
+                if outdoor_dew_point_state and outdoor_dew_point_state.state not in ['unknown', 'unavailable']:
+                    try:
+                        outdoor_dew_point = float(outdoor_dew_point_state.state)
+                        _LOGGER.debug(f"Using outdoor dew point sensor: {outdoor_dew_point}°C")
+                    except ValueError:
+                        pass
+
             # Calculate absolute humidity if sensors not available
             def calc_abs_humidity(temp_c, rh):
                 saturation_vapor_pressure = 6.112 * math.exp((17.67 * temp_c) / (temp_c + 243.5))
                 return (saturation_vapor_pressure * rh * 2.1674) / (273.15 + temp_c)
+            
+            # Calculate dew point if sensors not available
+            def calc_dew_point(temp_c, rh):
+                saturation_vapor_pressure = 6.112 * math.exp((17.67 * temp_c) / (temp_c + 243.5))
+                actual_vapor_pressure = (rh / 100.0) * saturation_vapor_pressure
+                if actual_vapor_pressure > 0:
+                    ln_vp = math.log(actual_vapor_pressure / 6.112)
+                    return (243.5 * ln_vp) / (17.67 - ln_vp)
+                return None
             
             if indoor_abs_humidity is None:
                 indoor_abs_humidity = calc_abs_humidity(indoor_temp_c, indoor_rh)
@@ -265,31 +321,53 @@ class WindowRecommendationSensor(Entity):
             if outdoor_abs_humidity is None:
                 outdoor_abs_humidity = calc_abs_humidity(outdoor_temp_c, outdoor_rh)
                 _LOGGER.debug(f"Calculated outdoor absolute humidity: {outdoor_abs_humidity} g/m³")
+                
+            if indoor_dew_point is None:
+                indoor_dew_point = calc_dew_point(indoor_temp_c, indoor_rh)
+                _LOGGER.debug(f"Calculated indoor dew point: {indoor_dew_point}°C")
+                
+            if outdoor_dew_point is None:
+                outdoor_dew_point = calc_dew_point(outdoor_temp_c, outdoor_rh)
+                _LOGGER.debug(f"Calculated outdoor dew point: {outdoor_dew_point}°C")
             
             # Store values for use in attributes
             self._indoor_temp_value = indoor_temp_c
             self._outdoor_temp_value = outdoor_temp_c
             self._indoor_abs_humidity_value = indoor_abs_humidity
             self._outdoor_abs_humidity_value = outdoor_abs_humidity
+            self._indoor_dew_point_value = indoor_dew_point
+            self._outdoor_dew_point_value = outdoor_dew_point
             
-            # Determine recommendation based on absolute humidity comparison
+            # Determine recommendation based on dew point, absolute humidity, and temperature comparison
+            # Primary check: Only recommend opening if outdoor dew point is at least 5°C lower than indoor
+            dew_point_favorable = (indoor_dew_point is not None and outdoor_dew_point is not None and 
+                                 outdoor_dew_point < indoor_dew_point - 5.0)
+            
             # If outdoor absolute humidity is higher than indoor by the configured offset, opening windows would increase indoor humidity
             if outdoor_abs_humidity > indoor_abs_humidity + self._absolute_humidity_offset:
                 self._state = WINDOW_STATE_TOO_WET
             # Check if indoor absolute humidity is above the warning level first
             elif indoor_abs_humidity > self._absolute_humidity_warning_level:
-                self._state = WINDOW_STATE_OPENING_RECOMMENDED
+                # Only recommend opening if dew point is favorable
+                if dew_point_favorable:
+                    self._state = WINDOW_STATE_OPENING_RECOMMENDED
+                else:
+                    self._state = WINDOW_STATE_TOO_WET
             # If outdoor temperature is significantly higher than indoor by the configured offset and indoor is comfortable
             elif outdoor_temp_c > indoor_temp_c + self._temperature_offset and indoor_temp_c < 24:
                 self._state = WINDOW_STATE_TOO_WARM
-            # Otherwise, it's generally OK to open
-            else:
+            # Otherwise, only recommend opening if dew point is favorable
+            elif dew_point_favorable:
                 self._state = WINDOW_STATE_OK_TO_OPEN
+            else:
+                self._state = WINDOW_STATE_TOO_WET
             
             _LOGGER.debug(f"Window recommendation for {self._name}: {self._state} "
-                         f"(Indoor AH: {indoor_abs_humidity:.2f}, Outdoor AH: {outdoor_abs_humidity:.2f}, "
-                         f"Temp offset: {self._temperature_offset}°C, AH offset: {self._absolute_humidity_offset}g/m³, "
-                         f"AH warning level: {self._absolute_humidity_warning_level}g/m³)")
+                         f"(Indoor: AH={indoor_abs_humidity:.2f}g/m³, DP={indoor_dew_point:.1f}°C; "
+                         f"Outdoor: AH={outdoor_abs_humidity:.2f}g/m³, DP={outdoor_dew_point:.1f}°C; "
+                         f"DP diff={outdoor_dew_point - indoor_dew_point:.1f}°C, "
+                         f"Offsets: temp={self._temperature_offset}°C, AH={self._absolute_humidity_offset}g/m³, "
+                         f"AH warning={self._absolute_humidity_warning_level}g/m³)")
             
         except ValueError as e:
             _LOGGER.error(f"Invalid sensor values for {self._name}: {e}")
@@ -298,6 +376,8 @@ class WindowRecommendationSensor(Entity):
             self._outdoor_temp_value = None
             self._indoor_abs_humidity_value = None
             self._outdoor_abs_humidity_value = None
+            self._indoor_dew_point_value = None
+            self._outdoor_dew_point_value = None
         except Exception as e:
             _LOGGER.error(f"Error updating window recommendation sensor {self._name}: {e}")
             self._state = None
@@ -305,6 +385,8 @@ class WindowRecommendationSensor(Entity):
             self._outdoor_temp_value = None
             self._indoor_abs_humidity_value = None
             self._outdoor_abs_humidity_value = None
+            self._indoor_dew_point_value = None
+            self._outdoor_dew_point_value = None
     
     def _find_absolute_humidity_sensor(self, humidity_entity_id):
         """Find the corresponding absolute humidity sensor for a given humidity sensor."""
@@ -330,4 +412,30 @@ class WindowRecommendationSensor(Entity):
             return expected_entity_id
             
         _LOGGER.debug(f"No absolute humidity sensor found for: {humidity_entity_id}")
+        return None
+        
+    def _find_dew_point_sensor(self, humidity_entity_id):
+        """Find the corresponding dew point sensor for a given humidity sensor."""
+        if not humidity_entity_id:
+            return None
+            
+        _LOGGER.debug(f"Looking for dew point sensor for: {humidity_entity_id}")
+        
+        # Search through all sensor entities to find one with matching source_humidity attribute
+        for entity_id in self._hass.states.async_entity_ids('sensor'):
+            if entity_id.startswith('sensor.') and 'dew_point' in entity_id.lower():
+                state = self._hass.states.get(entity_id)
+                if state and state.attributes:
+                    source_humidity = state.attributes.get('source_humidity')
+                    if source_humidity == humidity_entity_id:
+                        _LOGGER.debug(f"Found dew point sensor {entity_id} for humidity sensor {humidity_entity_id}")
+                        return entity_id
+        
+        # Also try the original expected pattern as fallback
+        expected_entity_id = f"sensor.dew_point_{humidity_entity_id.split('.')[-1]}"
+        if self._hass.states.get(expected_entity_id):
+            _LOGGER.debug(f"Found dew point sensor using expected pattern: {expected_entity_id}")
+            return expected_entity_id
+            
+        _LOGGER.debug(f"No dew point sensor found for: {humidity_entity_id}")
         return None

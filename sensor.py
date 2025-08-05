@@ -5,7 +5,7 @@ from homeassistant.const import CONF_PLATFORM
 import voluptuous as vol
 import logging
 
-from .const import SIGNAL_ADD_SENSOR, SIGNAL_ADD_WINDOW_SENSOR
+from .const import SIGNAL_ADD_SENSOR, SIGNAL_ADD_DEW_POINT_SENSOR, SIGNAL_ADD_WINDOW_SENSOR
 from .discovery import AbsoluteHumidityDiscovery
 
 _LOGGER = logging.getLogger(__name__)
@@ -36,6 +36,11 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
 async def async_discover(hass, humidity_entity_id, temperature_entity_id):
     """Manually trigger discovery of a specific sensor pair."""
     async_dispatcher_send(hass, SIGNAL_ADD_SENSOR, humidity_entity_id, temperature_entity_id)
+
+
+async def async_discover_dew_point(hass, humidity_entity_id, temperature_entity_id):
+    """Manually trigger discovery of a specific dew point sensor."""
+    async_dispatcher_send(hass, SIGNAL_ADD_DEW_POINT_SENSOR, humidity_entity_id, temperature_entity_id)
 
 
 async def async_discover_window_sensor(hass, indoor_humidity_entity_id, indoor_temp_entity_id,
