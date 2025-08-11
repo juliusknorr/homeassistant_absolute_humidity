@@ -3,7 +3,7 @@ from homeassistant.helpers.entity import Entity
 import math
 import logging
 
-from .const import WINDOW_STATE_TOO_WET, WINDOW_STATE_TOO_WARM, WINDOW_STATE_OK_TO_OPEN, WINDOW_STATE_OPENING_RECOMMENDED, DEFAULT_TEMPERATURE_OFFSET, DEFAULT_ABSOLUTE_HUMIDITY_OFFSET, DEFAULT_ABSOLUTE_HUMIDITY_WARNING_LEVEL
+from .const import WINDOW_STATE_TOO_WET, WINDOW_STATE_TOO_WARM, WINDOW_STATE_TOO_WARM_AND_WET, WINDOW_STATE_OK_TO_OPEN, WINDOW_STATE_OPENING_RECOMMENDED, DEFAULT_TEMPERATURE_OFFSET, DEFAULT_ABSOLUTE_HUMIDITY_OFFSET, DEFAULT_ABSOLUTE_HUMIDITY_WARNING_LEVEL
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -71,6 +71,8 @@ class WindowRecommendationSensor(Entity):
             return "mdi:water-alert"
         elif self._state == WINDOW_STATE_TOO_WARM:
             return "mdi:thermometer-alert"
+        elif self._state == WINDOW_STATE_TOO_WARM_AND_WET:
+            return "mdi:alert-circle"
         elif self._state == WINDOW_STATE_OPENING_RECOMMENDED:
             return "mdi:window-open-variant"
         else:
@@ -338,29 +340,24 @@ class WindowRecommendationSensor(Entity):
             self._indoor_dew_point_value = indoor_dew_point
             self._outdoor_dew_point_value = outdoor_dew_point
             
-            # Determine recommendation based on dew point, absolute humidity, and temperature comparison
-            # Primary check: Only recommend opening if outdoor dew point is at least 5°C lower than indoor
+            # Determine window opening recommendation
             dew_point_favorable = (indoor_dew_point is not None and outdoor_dew_point is not None and 
                                  outdoor_dew_point < indoor_dew_point - 5.0)
-            
-            # If outdoor absolute humidity is higher than indoor by the configured offset, opening windows would increase indoor humidity
-            if outdoor_abs_humidity > indoor_abs_humidity + self._absolute_humidity_offset:
+
+            outdoor_too_wet = outdoor_abs_humidity > indoor_abs_humidity + self._absolute_humidity_offset
+            outdoor_too_hot = outdoor_temp_c > indoor_temp_c + self._temperature_offset
+
+            # Check conditions in order of priority
+            if outdoor_too_wet and outdoor_too_hot:
+                self._state = WINDOW_STATE_TOO_WARM_AND_WET
+            elif outdoor_too_wet:
                 self._state = WINDOW_STATE_TOO_WET
-            # Check if indoor absolute humidity is above the warning level first
-            elif indoor_abs_humidity > self._absolute_humidity_warning_level:
-                # Only recommend opening if dew point is favorable
-                if dew_point_favorable:
-                    self._state = WINDOW_STATE_OPENING_RECOMMENDED
-                else:
-                    self._state = WINDOW_STATE_TOO_WET
-            # If outdoor temperature is significantly higher than indoor by the configured offset and indoor is comfortable
-            elif outdoor_temp_c > indoor_temp_c + self._temperature_offset and indoor_temp_c < 24:
+            elif outdoor_too_hot:
                 self._state = WINDOW_STATE_TOO_WARM
-            # Otherwise, only recommend opening if dew point is favorable
-            elif dew_point_favorable:
-                self._state = WINDOW_STATE_OK_TO_OPEN
+            elif indoor_abs_humidity > self._absolute_humidity_warning_level:
+                self._state = WINDOW_STATE_OPENING_RECOMMENDED if dew_point_favorable else WINDOW_STATE_OK_TO_OPEN
             else:
-                self._state = WINDOW_STATE_TOO_WET
+                self._state = WINDOW_STATE_OK_TO_OPEN
             
             _LOGGER.debug(f"Window recommendation for {self._name}: {self._state} "
                          f"(Indoor: AH={indoor_abs_humidity:.2f}g/m³, DP={indoor_dew_point:.1f}°C; "
