@@ -1,5 +1,5 @@
 """Window Recommendation Sensor class."""
-from homeassistant.helpers.entity import Entity
+from homeassistant.components.sensor import SensorEntity
 import math
 import logging
 
@@ -8,7 +8,7 @@ from .const import WINDOW_STATE_TOO_WET, WINDOW_STATE_TOO_WARM, WINDOW_STATE_TOO
 _LOGGER = logging.getLogger(__name__)
 
 
-class WindowRecommendationSensor(Entity):
+class WindowRecommendationSensor(SensorEntity):
     """Representation of a Window Recommendation sensor."""
     
     def __init__(self, hass, indoor_humidity_entity_id, indoor_temp_entity_id, 
@@ -60,6 +60,11 @@ class WindowRecommendationSensor(Entity):
     @property
     def state(self):
         """Return the state of the sensor."""
+        return self._state
+
+    @property
+    def native_value(self):
+        """Return the native value of the sensor."""
         return self._state
 
     @property

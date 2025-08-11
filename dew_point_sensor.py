@@ -1,12 +1,13 @@
 """Dew Point Sensor class."""
-from homeassistant.helpers.entity import Entity
+from homeassistant.components.sensor import SensorEntity
+from homeassistant.const import UnitOfTemperature
 import math
 import logging
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class DewPointSensor(Entity):
+class DewPointSensor(SensorEntity):
     """Representation of a Dew Point sensor."""
     
     def __init__(self, hass, humidity_entity_id, temperature_entity_id):
@@ -38,9 +39,9 @@ class DewPointSensor(Entity):
         return self._state
 
     @property
-    def unit_of_measurement(self):
-        """Return the unit of measurement."""
-        return "°C"
+    def native_unit_of_measurement(self):
+        """Return the native unit of measurement."""
+        return UnitOfTemperature.CELSIUS
     
     @property
     def device_class(self):
@@ -51,6 +52,11 @@ class DewPointSensor(Entity):
     def state_class(self):
         """Return the state class."""
         return "measurement"
+    
+    @property
+    def native_value(self):
+        """Return the native value of the sensor."""
+        return self._state
     
     @property
     def icon(self):

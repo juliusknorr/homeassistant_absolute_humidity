@@ -1,12 +1,13 @@
 """Absolute Humidity Sensor class."""
-from homeassistant.helpers.entity import Entity
+from homeassistant.components.sensor import SensorEntity
+from homeassistant.const import UnitOfMass
 import math
 import logging
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class AbsoluteHumiditySensor(Entity):
+class AbsoluteHumiditySensor(SensorEntity):
     """Representation of an Absolute Humidity sensor."""
     
     def __init__(self, hass, humidity_entity_id, temperature_entity_id):
@@ -38,8 +39,8 @@ class AbsoluteHumiditySensor(Entity):
         return self._state
 
     @property
-    def unit_of_measurement(self):
-        """Return the unit of measurement."""
+    def native_unit_of_measurement(self):
+        """Return the native unit of measurement."""
         return "g/m³"
     
     @property
@@ -51,6 +52,11 @@ class AbsoluteHumiditySensor(Entity):
     def state_class(self):
         """Return the state class."""
         return "measurement"
+    
+    @property
+    def native_value(self):
+        """Return the native value of the sensor."""
+        return self._state
     
     @property
     def icon(self):

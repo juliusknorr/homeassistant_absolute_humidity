@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+  <!-- Water drop shape representing humidity -->
+  <path d="M12 2C12 2 6.5 7.5 6.5 13.5C6.5 16.5 9 19 12 19S17.5 16.5 17.5 13.5C17.5 7.5 12 2 12 2Z" 
+        fill="#4FC3F7" fill-opacity="0.8"/>
+  
+  <!-- Measurement lines representing "absolute" measurement -->
+  <line x1="2" y1="6" x2="4" y2="6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="2" y1="9" x2="5" y2="9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="2" y1="12" x2="4" y2="12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="2" y1="15" x2="5" y2="15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="2" y1="18" x2="4" y2="18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+  
+  <!-- Small molecules/dots representing water molecules in air -->
+  <circle cx="19" cy="8" r="1" fill="currentColor" opacity="0.6"/>
+  <circle cx="21" cy="10" r="0.8" fill="currentColor" opacity="0.5"/>
+  <circle cx="20" cy="13" r="1" fill="currentColor" opacity="0.6"/>
+  <circle cx="22" cy="15" r="0.8" fill="currentColor" opacity="0.5"/>
+  <circle cx="19" cy="17" r="1" fill="currentColor" opacity="0.6"/>
+  
+  <!-- Central measurement indicator -->
+  <text x="12" y="14" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" 
+        font-size="3" font-weight="bold" fill="white">g/m³</text>
+</svg>

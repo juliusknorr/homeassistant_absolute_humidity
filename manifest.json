@@ -5,7 +5,8 @@
   "dependencies": [],
   "codeowners": [],
   "requirements": [],
-  "version": "2.1.0",
+  "version": "2.1.1",
   "iot_class": "calculated",
-  "icon": "mdi:water-percent"
+  "icon": "mdi:water-percent",
+  "homeassistant": "2021.12.0"
 }
